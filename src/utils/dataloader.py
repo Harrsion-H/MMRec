@@ -347,7 +347,7 @@ class EvalDataLoader(AbstractDataLoader):
         self.pos_items_per_u = self._get_pos_items_per_u(self.eval_u).to(self.device)
         self._get_eval_items_per_u(self.eval_u)
         # to device
-        self.eval_u = torch.tensor(self.eval_u).type(torch.LongTensor).to(self.device)
+        self.eval_u = torch.tensor(self.eval_u, dtype=torch.long, device=self.device)
 
     @property
     def pr_end(self):
@@ -388,7 +388,7 @@ class EvalDataLoader(AbstractDataLoader):
             self.train_pos_len_list.append(i_len)
             u_ids.extend([i]*i_len)
             i_ids.extend(u_ls)
-        return torch.tensor([u_ids, i_ids]).type(torch.LongTensor)
+        return torch.tensor([u_ids, list(map(int, i_ids))]).type(torch.LongTensor)
 
     def _get_eval_items_per_u(self, eval_users):
         """
