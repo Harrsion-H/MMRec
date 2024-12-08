@@ -23,7 +23,9 @@ class MGCN(GeneralRecommender):
     def __init__(self, config, dataset):
         super(MGCN, self).__init__(config, dataset)
         self.sparse = True
+        #cl_loss 指的是contrastive loss，对比损失
         self.cl_loss = config['cl_loss']
+        #n_ui_layers指的是用户-物品交互矩阵的层数
         self.n_ui_layers = config['n_ui_layers']
         self.embedding_dim = config['embedding_size']
         self.knn_k = config['knn_k']
@@ -32,7 +34,7 @@ class MGCN(GeneralRecommender):
 
         # load dataset info
         self.interaction_matrix = dataset.inter_matrix(form='coo').astype(np.float32)
-
+        #将用户-物品交互矩阵转换为用户-用户矩阵
         self.user_embedding = nn.Embedding(self.n_users, self.embedding_dim)
         self.item_id_embedding = nn.Embedding(self.n_items, self.embedding_dim)
         nn.init.xavier_uniform_(self.user_embedding.weight)

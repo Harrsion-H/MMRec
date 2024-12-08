@@ -1,0 +1,9 @@
+{
+	"video_id": "2",
+	"cover_image_analysis": {
+		"visual_elements": ["duck intestines", "chili peppers", "spring onions", "fried", "seasoned", "spicy", "savory", "brown", "red", "yellow", "white sesame seeds"],
+		"themes": ["street food", "authentic cuisine", "spicy flavors", "homemade", "summer cooking"],
+		"objects": ["plate", "food", "cooking utensils", "dishware", "person eating", "hands holding chopsticks"]
+	},
+	"integrated_description": "The image depicts a vibrant and appetizing plate of what appears to be duck intestines, seasoned with spring onions, chili peppers, and possibly other spices, suggesting a savory and spicy flavor profile. The presence of white sesame seeds indicates a garnishing touch. Given the context of the video title which mentions preparing this dish with a significant amount of chili, it can be inferred that the video is about making or enjoying a homemade, spicy street food-style dish, potentially during the warmer months of summer. The hands holding chopsticks hint at an interactive element, perhaps showing someone tasting or cooking the dish."
+}

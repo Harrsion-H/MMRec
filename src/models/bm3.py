@@ -23,7 +23,6 @@ from common.loss import EmbLoss
 class BM3(GeneralRecommender):
     def __init__(self, config, dataset):
         super(BM3, self).__init__(config, dataset)
-
         self.embedding_dim = config['embedding_size']
         self.feat_embed_dim = config['embedding_size']
         self.n_layers = config['n_layers']

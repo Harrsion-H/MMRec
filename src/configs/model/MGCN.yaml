@@ -1,12 +1,12 @@
-embedding_size: 64
-n_ui_layers: 2
+embedding_size: 64  #指定每个节点的embedding大小
+n_ui_layers: 2 #user_item 层0
 n_layers: 1
 
 learning_rate_scheduler: [0.96, 50]
 lambda_coeff: 0.9
 reg_weight: 1e-04
 
-knn_k: 10
+knn_k: 10 #knn的k值
 
 learning_rate: 0.001
 
