@@ -7,11 +7,11 @@ Run application
 """
 from logging import getLogger
 from itertools import product
-from utils.dataset import RecDataset
-from utils.dataloader import TrainDataLoader, EvalDataLoader
-from utils.logger import init_logger
-from utils.configurator import Config
-from utils.utils import init_seed, get_model, get_trainer, dict2str
+from .dataset import RecDataset
+from .dataloader import TrainDataLoader, EvalDataLoader
+from .logger import init_logger
+from .configurator import Config
+from .utils import init_seed, get_model, get_trainer, dict2str
 import platform
 import os
 
