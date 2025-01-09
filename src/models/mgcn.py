@@ -1,11 +1,17 @@
 # coding: utf-8
 # @email: y463213402@gmail.com
 r"""
-MGCN
+MGCN (Multi-View Graph Convolutional Network)
 ################################################
 Reference:
     https://github.com/demonph10/MGCN
     ACM MM'2023: [Multi-View Graph Convolutional Network for Multimedia Recommendation]
+
+主要思想:
+1. 利用多视图图卷积网络进行多媒体推荐
+2. 包含用户-物品交互视图和物品-物品相似度视图
+3. 使用行为引导的纯化器和行为感知的融合器来整合多模态信息
+4. 采用对比学习来增强模型表示能力
 """
 
 import os
@@ -21,6 +27,13 @@ from utils.utils import build_sim, compute_normalized_laplacian, build_knn_neigh
 
 class MGCN(GeneralRecommender):
     def __init__(self, config, dataset):
+        """
+        MGCN模型的初始化函数
+        
+        Args:
+            config (Config): 全局配置对象,包含各种模型参数
+            dataset (Dataset): 数据集对象,包含训练所需的所有数据
+        """
         super(MGCN, self).__init__(config, dataset)
         self.sparse = True
         #cl_loss 指的是contrastive loss，对比损失
@@ -33,82 +46,107 @@ class MGCN(GeneralRecommender):
         self.reg_weight = config['reg_weight']
 
         # load dataset info
+        # 构建用户-物品交互矩阵(COO格式)
         self.interaction_matrix = dataset.inter_matrix(form='coo').astype(np.float32)
         #将用户-物品交互矩阵转换为用户-用户矩阵
         self.user_embedding = nn.Embedding(self.n_users, self.embedding_dim)
         self.item_id_embedding = nn.Embedding(self.n_items, self.embedding_dim)
+        # 使用Xavier初始化嵌入层权重
         nn.init.xavier_uniform_(self.user_embedding.weight)
         nn.init.xavier_uniform_(self.item_id_embedding.weight)
 
+        # 构建图像和文本相似度矩阵的文件路径
         dataset_path = os.path.abspath(config['data_path'] + config['dataset'])
         image_adj_file = os.path.join(dataset_path, 'image_adj_{}_{}.pt'.format(self.knn_k, self.sparse))
         text_adj_file = os.path.join(dataset_path, 'text_adj_{}_{}.pt'.format(self.knn_k, self.sparse))
 
+        # 获取归一化的邻接矩阵
         self.norm_adj = self.get_adj_mat()
+        # 将稀疏矩阵转换为PyTorch稀疏张量
         self.R = self.sparse_mx_to_torch_sparse_tensor(self.R).float().to(self.device)
         self.norm_adj = self.sparse_mx_to_torch_sparse_tensor(self.norm_adj).float().to(self.device)
 
-
+        # 处理图像特征
         if self.v_feat is not None:
             self.image_embedding = nn.Embedding.from_pretrained(self.v_feat, freeze=False)
             if os.path.exists(image_adj_file):
                 image_adj = torch.load(image_adj_file)
             else:
+                # 构建图像相似度矩阵
                 image_adj = build_sim(self.image_embedding.weight.detach())
                 image_adj = build_knn_normalized_graph(image_adj, topk=self.knn_k, is_sparse=self.sparse,
                                                        norm_type='sym')
                 torch.save(image_adj, image_adj_file)
             self.image_original_adj = image_adj.cuda()
 
+        # 处理文本特征
         if self.t_feat is not None:
             self.text_embedding = nn.Embedding.from_pretrained(self.t_feat, freeze=False)
             if os.path.exists(text_adj_file):
                 text_adj = torch.load(text_adj_file)
             else:
+                # 构建文本相似度矩阵
                 text_adj = build_sim(self.text_embedding.weight.detach())
                 text_adj = build_knn_normalized_graph(text_adj, topk=self.knn_k, is_sparse=self.sparse, norm_type='sym')
                 torch.save(text_adj, text_adj_file)
             self.text_original_adj = text_adj.cuda()
 
+        # 特征转换层
         if self.v_feat is not None:
             self.image_trs = nn.Linear(self.v_feat.shape[1], self.embedding_dim)
         if self.t_feat is not None:
             self.text_trs = nn.Linear(self.t_feat.shape[1], self.embedding_dim)
 
+        # softmax层用于注意力权重计算
         self.softmax = nn.Softmax(dim=-1)
 
+        # 共同特征查询网络
         self.query_common = nn.Sequential(
             nn.Linear(self.embedding_dim, self.embedding_dim),
             nn.Tanh(),
             nn.Linear(self.embedding_dim, 1, bias=False)
         )
 
+        # 图像门控单元
         self.gate_v = nn.Sequential(
             nn.Linear(self.embedding_dim, self.embedding_dim),
             nn.Sigmoid()
         )
 
+        # 文本门控单元
         self.gate_t = nn.Sequential(
             nn.Linear(self.embedding_dim, self.embedding_dim),
             nn.Sigmoid()
         )
 
+        # 图像偏好门控单元
         self.gate_image_prefer = nn.Sequential(
             nn.Linear(self.embedding_dim, self.embedding_dim),
             nn.Sigmoid()
         )
 
+        # 文本偏好门控单元
         self.gate_text_prefer = nn.Sequential(
             nn.Linear(self.embedding_dim, self.embedding_dim),
             nn.Sigmoid()
         )
 
+        # 温度参数
         self.tau = 0.5
 
     def pre_epoch_processing(self):
+        """
+        每个epoch前的预处理
+        """
         pass
 
     def get_adj_mat(self):
+        """
+        构建归一化的邻接矩阵
+        
+        Returns:
+            scipy.sparse.csr_matrix: 归一化后的邻接矩阵
+        """
         adj_mat = sp.dok_matrix((self.n_users + self.n_items, self.n_users + self.n_items), dtype=np.float32)
         adj_mat = adj_mat.tolil()
         R = self.interaction_matrix.tolil()
@@ -118,6 +156,15 @@ class MGCN(GeneralRecommender):
         adj_mat = adj_mat.todok()
 
         def normalized_adj_single(adj):
+            """
+            对邻接矩阵进行归一化
+            
+            Args:
+                adj: 原始邻接矩阵
+                
+            Returns:
+                归一化后的邻接矩阵
+            """
             rowsum = np.array(adj.sum(1))
 
             d_inv = np.power(rowsum, -0.5).flatten()
@@ -138,7 +185,15 @@ class MGCN(GeneralRecommender):
         return norm_adj_mat.tocsr()
 
     def sparse_mx_to_torch_sparse_tensor(self, sparse_mx):
-        """Convert a scipy sparse matrix to a torch sparse tensor."""
+        """
+        将scipy稀疏矩阵转换为torch稀疏张量
+        
+        Args:
+            sparse_mx: scipy稀疏矩阵
+            
+        Returns:
+            torch.sparse.FloatTensor: 转换后的torch稀疏张量
+        """
         sparse_mx = sparse_mx.tocoo().astype(np.float32)
         indices = torch.from_numpy(np.vstack((sparse_mx.row, sparse_mx.col)).astype(np.int64))
         values = torch.from_numpy(sparse_mx.data)
@@ -146,16 +201,28 @@ class MGCN(GeneralRecommender):
         return torch.sparse.FloatTensor(indices, values, shape)
 
     def forward(self, adj, train=False):
+        """
+        模型的前向传播
+        
+        Args:
+            adj: 归一化的邻接矩阵
+            train: 是否为训练模式
+            
+        Returns:
+            训练模式下返回用户嵌入、物品嵌入、侧面嵌入和内容嵌入
+            预测模式下返回用户嵌入和物品嵌入
+        """
+        # 特征转换
         if self.v_feat is not None:
             image_feats = self.image_trs(self.image_embedding.weight)
         if self.t_feat is not None:
             text_feats = self.text_trs(self.text_embedding.weight)
 
-        # Behavior-Guided Purifier
+        # 行为引导的纯化器
         image_item_embeds = torch.multiply(self.item_id_embedding.weight, self.gate_v(image_feats))
         text_item_embeds = torch.multiply(self.item_id_embedding.weight, self.gate_t(text_feats))
 
-        # User-Item View
+        # 用户-物品视图
         item_embeds = self.item_id_embedding.weight
         user_embeds = self.user_embedding.weight
         ego_embeddings = torch.cat([user_embeds, item_embeds], dim=0)
@@ -168,7 +235,7 @@ class MGCN(GeneralRecommender):
         all_embeddings = all_embeddings.mean(dim=1, keepdim=False)
         content_embeds = all_embeddings
 
-        # Item-Item View
+        # 物品-物品视图
         if self.sparse:
             for i in range(self.n_layers):
                 image_item_embeds = torch.sparse.mm(self.image_original_adj, image_item_embeds)
@@ -186,7 +253,7 @@ class MGCN(GeneralRecommender):
         text_user_embeds = torch.sparse.mm(self.R, text_item_embeds)
         text_embeds = torch.cat([text_user_embeds, text_item_embeds], dim=0)
 
-        # Behavior-Aware Fuser
+        # 行为感知的融合器
         att_common = torch.cat([self.query_common(image_embeds), self.query_common(text_embeds)], dim=-1)
         weight_common = self.softmax(att_common)
         common_embeds = weight_common[:, 0].unsqueeze(dim=1) * image_embeds + weight_common[:, 1].unsqueeze(
@@ -210,6 +277,19 @@ class MGCN(GeneralRecommender):
         return all_embeddings_users, all_embeddings_items
 
     def bpr_loss(self, users, pos_items, neg_items):
+        """
+        计算BPR损失
+        
+        Args:
+            users: 用户嵌入
+            pos_items: 正样本物品嵌入
+            neg_items: 负样本物品嵌入
+            
+        Returns:
+            mf_loss: 矩阵分解损失
+            emb_loss: 嵌入正则化损失
+            reg_loss: 额外的正则化损失
+        """
         pos_scores = torch.sum(torch.mul(users, pos_items), dim=1)
         neg_scores = torch.sum(torch.mul(users, neg_items), dim=1)
 
@@ -224,6 +304,17 @@ class MGCN(GeneralRecommender):
         return mf_loss, emb_loss, reg_loss
 
     def InfoNCE(self, view1, view2, temperature):
+        """
+        计算InfoNCE对比损失
+        
+        Args:
+            view1: 第一个视图的嵌入
+            view2: 第二个视图的嵌入
+            temperature: 温度参数
+            
+        Returns:
+            对比损失值
+        """
         view1, view2 = F.normalize(view1, dim=1), F.normalize(view2, dim=1)
         pos_score = (view1 * view2).sum(dim=-1)
         pos_score = torch.exp(pos_score / temperature)
@@ -233,6 +324,15 @@ class MGCN(GeneralRecommender):
         return torch.mean(cl_loss)
 
     def calculate_loss(self, interaction):
+        """
+        计算总损失
+        
+        Args:
+            interaction: 包含用户、正样本物品和负样本物品的交互信息
+            
+        Returns:
+            总损失值
+        """
         users = interaction[0]
         pos_items = interaction[1]
         neg_items = interaction[2]
@@ -255,6 +355,15 @@ class MGCN(GeneralRecommender):
         return batch_mf_loss + batch_emb_loss + batch_reg_loss + self.cl_loss * cl_loss
 
     def full_sort_predict(self, interaction):
+        """
+        全排序预测
+        
+        Args:
+            interaction: 包含用户ID的交互信息
+            
+        Returns:
+            用户对所有物品的预测分数
+        """
         user = interaction[0]
 
         restore_user_e, restore_item_e = self.forward(self.norm_adj)

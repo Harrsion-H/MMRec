@@ -1,13 +1,40 @@
+
+# MMRec项目介绍
+## 数据集
+data 是数据集入口，目前的microlens 是网上人提供的数据源，提取了图片特征，以及文本特征。
+mydata 是草稿，我之前做了一些的大模型，生成数据的结果。（tag不需要了，原数据集中有）
+## 进度
+跑通了MGCN，结果如下：
+
+
+### 实验参数
+- seed: 999
+- cl_loss: 0.01
+
+### 验证集结果
+
+| 指标        | @5     | @10    | @20    | @50    |
+|------------|--------|--------|--------|--------|
+| Recall     | 0.0456 | 0.0751 | 0.1147 | 0.1812 |
+| NDCG       | 0.0288 | 0.0383 | 0.0484 | 0.0617 |
+| Precision  | 0.0095 | 0.0078 | 0.0060 | 0.0038 |
+| MAP        | 0.0230 | 0.0270 | 0.0297 | 0.0318 |
+
+### 测试集结果
+
+| 指标        | @5     | @10    | @20    | @50    |
+|------------|--------|--------|--------|--------|
+| Recall     | 0.0455 | 0.0755 | 0.1130 | 0.1784 |
+| NDCG       | 0.0288 | 0.0386 | 0.0483 | 0.0615 |
+| Precision  | 0.0099 | 0.0082 | 0.0062 | 0.0039 |
+| MAP        | 0.0228 | 0.0268 | 0.0295 | 0.0317 |
+
+
+好像很差
+
+
 # MMRec
 
-<div align="center">
-  <a href="https://github.com/enoche/MultimodalRecSys"><img width="300px" height="auto" src="https://github.com/enoche/MMRec/blob/master/images/logo.png"></a>
-</div>
-
-
-$\text{MMRec}$: A modern <ins>M</ins>ulti<ins>M</ins>odal <ins>Rec</ins>ommendation toolbox that simplifies your research [arXiv](https://arxiv.org/abs/2302.03497).  
-:point_right: Check our [comprehensive survey on MMRec, arXiv](https://arxiv.org/abs/2302.04473).   
-:point_right: Check the awesome [multimodal recommendation resources](https://github.com/enoche/MultimodalRecSys).  
 
 ## Toolbox
 <p>

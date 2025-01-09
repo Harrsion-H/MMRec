@@ -5,7 +5,10 @@ __pycache__/
 .idea
 .conda
 /data/baby/
-
+/log/
+/saved/
+/recommend_topk/
+/data
 # C extensions
 *.so
 

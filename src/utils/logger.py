@@ -11,55 +11,52 @@ from utils.utils import get_local_time
 
 
 def init_logger(config):
-    """
-    A logger that can show a message on standard output and write it into the
-    file named `filename` simultaneously.
-    All the message that you want to log MUST be str.
-
+    """初始化日志记录器
+    
     Args:
-        config (Config): An instance object of Config, used to record parameter information.
+        config (Config): 配置对象
     """
-    LOGROOT = './log/'
-    dir_name = os.path.dirname(LOGROOT)
-    if not os.path.exists(dir_name):
-        os.makedirs(dir_name)
+    # 使用配置文件中的路径
+    log_dir = config['log']['save_dir'] if 'log' in config else './log/'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
+        
+    # 生成日志文件名
+    timestamp = get_local_time()
+    model_name = config['model']
+    dataset_name = config['dataset'] 
+    logfilename = f'{timestamp}-{model_name}-{dataset_name}.log'
+    logfilepath = os.path.join(log_dir, logfilename)
 
-    logfilename = '{}-{}-{}.log'.format(config['model'], config['dataset'], get_local_time())
+    # 使用配置文件中的格式
+    file_formatter = logging.Formatter(
+        fmt=config['log']['file_format'] if 'log' in config else "%(asctime)s [%(levelname)s] [%(name)s] %(message)s",
+        datefmt=config['log']['date_format'] if 'log' in config else "%Y-%m-%d %H:%M:%S"
+    )
+    
+    console_formatter = logging.Formatter(
+        fmt=config['log']['console_format'] if 'log' in config else "%(asctime)s [%(levelname)s] %(message)s",
+        datefmt=config['log']['date_format'] if 'log' in config else "%Y-%m-%d %H:%M:%S"
+    )
 
-    logfilepath = os.path.join(LOGROOT, logfilename)
-
-    filefmt = "%(asctime)-15s %(levelname)s %(message)s"
-    filedatefmt = "%a %d %b %Y %H:%M:%S"
-    fileformatter = logging.Formatter(filefmt, filedatefmt)
-
-    sfmt = u"%(asctime)-15s %(levelname)s %(message)s"
-    sdatefmt = "%d %b %H:%M"
-    sformatter = logging.Formatter(sfmt, sdatefmt)
-    if config['state'] is None or config['state'].lower() == 'info':
-        level = logging.INFO
-    elif config['state'].lower() == 'debug':
-        level = logging.DEBUG
-    elif config['state'].lower() == 'error':
-        level = logging.ERROR
-    elif config['state'].lower() == 'warning':
-        level = logging.WARNING
-    elif config['state'].lower() == 'critical':
-        level = logging.CRITICAL
-    else:
-        level = logging.INFO
-    # comment following 3 lines and handlers = [sh, fh] to cancel file dump.
-    fh = logging.FileHandler(logfilepath, 'w', 'utf-8')
-    fh.setLevel(level)
-    fh.setFormatter(fileformatter)
-
+    # 文件处理器
+    fh = logging.FileHandler(logfilepath, encoding='utf-8')
+    fh.setFormatter(file_formatter)
+    
+    # 控制台处理器
     sh = logging.StreamHandler()
-    sh.setLevel(level)
-    sh.setFormatter(sformatter)
+    sh.setFormatter(console_formatter)
 
+    # 使用配置文件中的日志级别
+    try:
+        level = getattr(logging, config['log']['state'].upper()) if 'log' in config else logging.INFO
+    except (AttributeError, KeyError):
+        level = logging.INFO
+    
+    # 配置根日志记录器
     logging.basicConfig(
         level=level,
-        #handlers=[sh]
-        handlers = [sh, fh]
+        handlers=[sh, fh]
     )
 
 

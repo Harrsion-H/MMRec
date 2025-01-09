@@ -9,9 +9,10 @@ inter_splitting_label: 'x_label'
 filter_out_cod_start_users: True
 is_multimodal_model: True
 
-checkpoint_dir: 'saved'
+save_model: True
+checkpoint_dir: '../saved/'
 save_recommended_topk: True
-recommend_topk: 'recommend_topk/'
+recommend_topk: '../recommend_topk/'
 
 embedding_size: 64
 weight_decay: 0.0
@@ -60,3 +61,11 @@ end2end: False
 
 # iteration parameters
 hyper_parameters: ["seed"]
+
+# 日志配置
+log:
+  state: INFO  # 日志级别:DEBUG/INFO/WARNING/ERROR
+  save_dir: '../log/'  # 日志保存目录
+  console_format: '%(asctime)s [%(levelname)s] %(message)s'
+  file_format: '%(asctime)s [%(levelname)s] [%(name)s] %(message)s'
+  date_format: '%Y-%m-%d %H:%M:%S'
