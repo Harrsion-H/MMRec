@@ -202,73 +202,98 @@ class MGCN(GeneralRecommender):
 
     def forward(self, adj, train=False):
         """
-        模型的前向传播
+        模型的前向传播函数
         
         Args:
-            adj: 归一化的邻接矩阵
-            train: 是否为训练模式
+            adj: 归一化的邻接矩阵,表示用户-物品交互关系
+            train: 是否为训练模式,默认为False
             
         Returns:
-            训练模式下返回用户嵌入、物品嵌入、侧面嵌入和内容嵌入
-            预测模式下返回用户嵌入和物品嵌入
+            train=True时:
+                - all_embeddings_users: 最终的用户嵌入
+                - all_embeddings_items: 最终的物品嵌入  
+                - side_embeds: 侧面信息嵌入(图像和文本)
+                - content_embeds: 内容信息嵌入(ID)
+            train=False时:
+                - all_embeddings_users: 最终的用户嵌入
+                - all_embeddings_items: 最终的物品嵌入
         """
-        # 特征转换
+        # 1. 多模态特征转换
         if self.v_feat is not None:
+            # 转换图像特征
             image_feats = self.image_trs(self.image_embedding.weight)
         if self.t_feat is not None:
+            # 转换文本特征
             text_feats = self.text_trs(self.text_embedding.weight)
 
-        # 行为引导的纯化器
-        image_item_embeds = torch.multiply(self.item_id_embedding.weight, self.gate_v(image_feats))
-        text_item_embeds = torch.multiply(self.item_id_embedding.weight, self.gate_t(text_feats))
+        # 2. 行为引导的特征纯化
+        # 使用门控机制过滤图像和文本特征
+        image_item_embeds = torch.multiply(self.item_id_embedding.weight, self.gate_v(image_feats))  # 图像特征纯化
+        text_item_embeds = torch.multiply(self.item_id_embedding.weight, self.gate_t(text_feats))    # 文本特征纯化
 
-        # 用户-物品视图
+        # 3. 用户-物品交互建模
         item_embeds = self.item_id_embedding.weight
         user_embeds = self.user_embedding.weight
+        # 拼接用户和物品嵌入
         ego_embeddings = torch.cat([user_embeds, item_embeds], dim=0)
         all_embeddings = [ego_embeddings]
+        # 多层图卷积传播
         for i in range(self.n_ui_layers):
-            side_embeddings = torch.sparse.mm(adj, ego_embeddings)
+            side_embeddings = torch.sparse.mm(adj, ego_embeddings)  # 消息传递
             ego_embeddings = side_embeddings
             all_embeddings += [ego_embeddings]
+        # 聚合多层结果
         all_embeddings = torch.stack(all_embeddings, dim=1)
         all_embeddings = all_embeddings.mean(dim=1, keepdim=False)
         content_embeds = all_embeddings
 
-        # 物品-物品视图
+        # 4. 物品-物品关系建模
+        # 4.1 图像视图传播
         if self.sparse:
+            # 稀疏矩阵乘法
             for i in range(self.n_layers):
                 image_item_embeds = torch.sparse.mm(self.image_original_adj, image_item_embeds)
         else:
+            # 密集矩阵乘法
             for i in range(self.n_layers):
                 image_item_embeds = torch.mm(self.image_original_adj, image_item_embeds)
+        # 获取用户在图像视图下的表示
         image_user_embeds = torch.sparse.mm(self.R, image_item_embeds)
         image_embeds = torch.cat([image_user_embeds, image_item_embeds], dim=0)
+
+        # 4.2 文本视图传播
         if self.sparse:
             for i in range(self.n_layers):
                 text_item_embeds = torch.sparse.mm(self.text_original_adj, text_item_embeds)
         else:
             for i in range(self.n_layers):
                 text_item_embeds = torch.mm(self.text_original_adj, text_item_embeds)
+        # 获取用户在文本视图下的表示
         text_user_embeds = torch.sparse.mm(self.R, text_item_embeds)
         text_embeds = torch.cat([text_user_embeds, text_item_embeds], dim=0)
 
-        # 行为感知的融合器
+        # 5. 行为感知的多模态特征融合
+        # 5.1 计算共同特征
         att_common = torch.cat([self.query_common(image_embeds), self.query_common(text_embeds)], dim=-1)
-        weight_common = self.softmax(att_common)
-        common_embeds = weight_common[:, 0].unsqueeze(dim=1) * image_embeds + weight_common[:, 1].unsqueeze(
-            dim=1) * text_embeds
-        sep_image_embeds = image_embeds - common_embeds
-        sep_text_embeds = text_embeds - common_embeds
+        weight_common = self.softmax(att_common)  # 注意力权重
+        # 加权融合得到共同特征
+        common_embeds = weight_common[:, 0].unsqueeze(dim=1) * image_embeds + weight_common[:, 1].unsqueeze(dim=1) * text_embeds
+        
+        # 5.2 提取特定特征
+        sep_image_embeds = image_embeds - common_embeds  # 图像特定特征
+        sep_text_embeds = text_embeds - common_embeds    # 文本特定特征
 
-        image_prefer = self.gate_image_prefer(content_embeds)
-        text_prefer = self.gate_text_prefer(content_embeds)
+        # 5.3 基于用户行为偏好的特征调整
+        image_prefer = self.gate_image_prefer(content_embeds)  # 图像偏好门控
+        text_prefer = self.gate_text_prefer(content_embeds)    # 文本偏好门控
         sep_image_embeds = torch.multiply(image_prefer, sep_image_embeds)
         sep_text_embeds = torch.multiply(text_prefer, sep_text_embeds)
+        # 融合所有特征
         side_embeds = (sep_image_embeds + sep_text_embeds + common_embeds) / 3
 
+        # 6. 最终特征融合
         all_embeds = content_embeds + side_embeds
-
+        # 分离用户和物品嵌入
         all_embeddings_users, all_embeddings_items = torch.split(all_embeds, [self.n_users, self.n_items], dim=0)
 
         if train:
